@@ -1,0 +1,7 @@
+/vendor/
+/logs/*
+/public/images/*
+/src/uploads/*
+!/logs/README.md
+/composer.lock
+/tests/*
