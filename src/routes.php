@@ -4,41 +4,28 @@ use \Psr\Http\Message\ResponseInterface as Response;
 use Slim\Http\UploadedFile;
 
 require 'rb-mysql.php';
-require '../vendor/autoload.php';
+require 'vendor/autoload.php';
+require_once 'config.php';
 
-$config['displayErrorDetails'] = true;
-// $config['addContentLengthHeader'] = false;
-// $config['determineRouteBeforeAppMiddleware'] = true;
 
-$config['db']['host']   = 'localhost';
-$config['db']['user']   = 'root';
-$config['db']['pass']   = '';
-$config['db']['dbname'] = 'sportsplanetdb';
-
-R::setup( 'mysql:host=localhost;dbname=sportsplanetdb', 'root', '');
+R::setup( 'mysql:host='.$config['db']['host'].';dbname='.$config['db']['dbname'], $config['db']['user'], $config['db']['pass']);
 
 $app = new \Slim\App(['settings' => $config]);
 
 
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS, DELETE, PUT');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Bearer');
 
 $container = $app->getContainer();
 $container['upload_directory'] = '../public/images';
 
 require 'api/crud.php';
 require 'api/pageconfig.php';
+require 'api/authentication.php';
 
 
 // endpoints for model filter component
-$app->get('/api/clubmembers/{club_id}/{param_name}/{param_value}', function (Request $request, Response $response, array $args) {
-    $club_id = $args['club_id'];
-    $param_name = $args['param_name'];
-    $param_value = $args['param_value'];
-    $result = R::find("fighter", $param_name . ' LIKE ? AND fightclubid = ?', array('%'.$param_value.'%', $club_id));
-    return $response->getBody()->write(json_encode($result));
-});
 
 $app->get('/api/search/{model_name}/{param_name}/{param_value}', function (Request $request, Response $response, array $args) {
     $model_name = $args['model_name'];
@@ -50,6 +37,14 @@ $app->get('/api/search/{model_name}/{param_name}/{param_value}', function (Reque
 
 
 // club member endpoints
+$app->get('/api/clubmembers/{club_id}/{param_name}/{param_value}', function (Request $request, Response $response, array $args) {
+    $club_id = $args['club_id'];
+    $param_name = $args['param_name'];
+    $param_value = $args['param_value'];
+    $result = R::find("fighter", $param_name . ' LIKE ? AND fightclubid = ?', array('%'.$param_value.'%', $club_id));
+    return $response->getBody()->write(json_encode($result));
+});
+
 $app->get('/api/clubmembers/{id}', function (Request $request, Response $response, array $args) {
     $id = $args['id'];
     $result = R::findAll('fighter', ' fightclubid = ?', array($id));
@@ -98,6 +93,30 @@ $app->get('/api/fighters/unassigned/{param_name}/{param_value}', function (Reque
     $param_value = $args['param_value'];
     $result = R::findAll('fighter', ' fightclubid = 0 AND ' . $param_name . ' = ?', array($param_value));
     return $response->getBody()->write(json_encode($result));
+});
+
+$app->get('/api/videos', function (Request $request, Response $response, array $args) {
+    $params = $request->getQueryParams();
+    $tournamentFights = R::findAll('tournamentfight');
+    $videos = array();
+    foreach($tournamentFights as $tournamentFight){
+        $tournament = R::find('tournament', ' id = ? ', [$tournamentFight->tournamentid])[$tournamentFight->tournamentid];
+        $fightContestants = R::findAll('fightcontestant', ' tournamentfightid = ? ', array($tournamentFight->id));
+        $contestantIds = array();
+        foreach($fightContestants as $fightContestant){
+            $contestantIds[] = $fightContestant->fighterid;
+        }
+        $fighters = R::findAll('fighter', ' id IN ( ' . R::genSlots($contestantIds) . ' ) ', $contestantIds);
+        $video = array(
+            'fighters' => $fighters,
+            'tournament' => $tournament,
+            'videourl' => $tournamentFight->videourl
+        );
+        if(!empty($tournamentFight->videourl)){
+            $videos[] = $video;
+        }
+    }
+    return $response->getBody()->write(json_encode($videos));
 });
 
 

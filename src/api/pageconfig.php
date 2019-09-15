@@ -29,5 +29,9 @@ $app->post('/api/pageconfig/{page_name}', function (Request $request, Response $
 $app->get('/api/pageconfig/{page_name}', function(Request $request, Response $response, array $args){
     $page_name = $args['page_name'];
     $result = R::findAll('pageconfiguration', ' page = ? ', [$page_name]);
-    return $response->getBody()->write(json_encode($result));
+    $formattedConfigList = array();
+    foreach($result as $r){
+        $formattedConfigList[$r->paramname] = $r;
+    }
+    return $response->getBody()->write(json_encode($formattedConfigList));
 });
