@@ -3,6 +3,7 @@
 /public/images/*
 /src/uploads/*
 !/logs/README.md
+/php_errors.log
 /composer.lock
 /tests/*
 /src/config.php
