@@ -4,7 +4,7 @@ use \Psr\Http\Message\ResponseInterface as Response;
 use Slim\Http\UploadedFile;
 
 require 'rb-mysql.php';
-require '../vendor/autoload.php';
+require 'vendor/autoload.php';
 
 $config['displayErrorDetails'] = true;
 // $config['addContentLengthHeader'] = false;
