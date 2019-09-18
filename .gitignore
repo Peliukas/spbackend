@@ -6,3 +6,4 @@
 /php_errors.log
 /composer.lock
 /tests/*
+/src/config.php
