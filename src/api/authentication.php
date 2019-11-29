@@ -23,7 +23,7 @@ $app->post('/api/login', function (Request $request, Response $response, array $
 });
 
 $app->post('/api/logout', function (Request $request, Response $response, array $args) {
-    $userToken = $request->getHeader('Bearer')[0];
+    $userToken = !empty($request->getHeader('Bearer')) ? $request->getHeader('Bearer')[0] : '';
     $user = R::findOne("user", " token = ? ", [$userToken]);
     if($user){
         $user->token = '';

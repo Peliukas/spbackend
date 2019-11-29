@@ -5,9 +5,11 @@ use Slim\Http\UploadedFile;
 
 require 'rb-mysql.php';
 require 'vendor/autoload.php';
-require_once 'config.php';
+require 'config.php';
 
 
+// global $youtubeApiKey;
+// global $youtubeChannelId; 
 R::setup( 'mysql:host='.$config['db']['host'].';dbname='.$config['db']['dbname'], $config['db']['user'], $config['db']['pass']);
 
 $app = new \Slim\App(['settings' => $config]);
@@ -23,17 +25,6 @@ $container['upload_directory'] = '../public/images';
 require 'api/crud.php';
 require 'api/pageconfig.php';
 require 'api/authentication.php';
-
-
-// endpoints for model filter component
-
-$app->get('/api/search/{model_name}/{param_name}/{param_value}', function (Request $request, Response $response, array $args) {
-    $model_name = $args['model_name'];
-    $param_name = $args['param_name'];
-    $param_value = $args['param_value'];
-    $result = R::find($model_name, $param_name . ' LIKE ? ', array('%'.$param_value.'%'));
-    return $response->getBody()->write(json_encode($result));
-});
 
 
 // club member endpoints
@@ -95,29 +86,56 @@ $app->get('/api/fighters/unassigned/{param_name}/{param_value}', function (Reque
     return $response->getBody()->write(json_encode($result));
 });
 
-$app->get('/api/videos', function (Request $request, Response $response, array $args) {
-    $params = $request->getQueryParams();
-    $tournamentFights = R::findAll('tournamentfight');
-    $videos = array();
-    foreach($tournamentFights as $tournamentFight){
-        $tournament = R::find('tournament', ' id = ? ', [$tournamentFight->tournamentid])[$tournamentFight->tournamentid];
-        $fightContestants = R::findAll('fightcontestant', ' tournamentfightid = ? ', array($tournamentFight->id));
-        $contestantIds = array();
-        foreach($fightContestants as $fightContestant){
-            $contestantIds[] = $fightContestant->fighterid;
+$app->get('/api/cachevideos', function(Request $request, Response $response) {
+        require 'config.php';
+        $ch = curl_init();
+        $channelVideos = array();
+        $requestUrl = 'https://www.googleapis.com/youtube/v3/search?key=' . $youtubeApiKey .  '&channelId=' . $youtubeCannelId . '&order=date&part=snippet&type=video,id&maxResults=50';
+        $pageResult = json_decode(file_get_contents($requestUrl));
+        if(empty($pageResult->items)){
+            return $response->getBody()->write(json_encode($pageResult));
         }
-        $fighters = R::findAll('fighter', ' id IN ( ' . R::genSlots($contestantIds) . ' ) ', $contestantIds);
-        $video = array(
-            'fighters' => $fighters,
-            'tournament' => $tournament,
-            'videourl' => $tournamentFight->videourl
-        );
-        if(!empty($tournamentFight->videourl)){
-            $videos[] = $video;
+        foreach($pageResult->items as $pi){
+            $channelVideos[] = array(
+                'videoid' => $pi->id->videoId,
+                'title' => $pi->snippet->title,
+                'thumbnail' => $pi->snippet->thumbnails->default->url
+            );
         }
-    }
-    return $response->getBody()->write(json_encode($videos));
-});
+        if(!empty($pageResult->nextPageToken)){
+            do{
+                $requestUrl = 'https://www.googleapis.com/youtube/v3/search?key=' . $youtubeApiKey .  '&channelId=' . $youtubeCannelId . '&order=date&part=snippet&type=video,id&maxResults=50&pageToken=' . $pageResult->nextPageToken;
+                $pageResult = json_decode(file_get_contents($requestUrl));
+                if(!empty($pageResult->items)){
+                    foreach($pageResult->items as $pi){
+                        $channelVideos[] = array(
+                            'videoid' => $pi->id->videoId,
+                            'title' => $pi->snippet->title,
+                            'thumbnail' => $pi->snippet->thumbnails->default->url
+                        );
+                    }   
+                }
+            }while(!empty($pageResult->nextPageToken));
+
+        }
+        $cachedcount = 0;
+        $addedids = array();
+        foreach($channelVideos as $channelVideo){
+            $existingvideo = R::find('channelvideo', " videoid = ? ", array($channelVideo['videoid']));
+            if(empty($existingvideo)){
+                $video = R::dispense('channelvideo');
+                $video->videoid = $channelVideo['videoid'];
+                $video->title = $channelVideo['title'];
+                $video->thumbnail = $channelVideo['thumbnail'];
+                $videoid = R::store($video);
+                if(!empty($videoid)){
+                    $addedids[] = $videoid;
+                    $cachedcount++;
+                }
+            }
+        }
+        return $response->getBody()->write(json_encode(array("cachedcount" => $cachedcount, "addedids" => $addedids)));
+    });
 
 
 // image upload
